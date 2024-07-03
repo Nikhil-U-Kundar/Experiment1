@@ -1,55 +1,88 @@
-'use strict';
+const express = require("express");
+const path = require("path");
+const bcrypt = require("bcrypt");
+const User = require('./config');
 
-/**
- * element toggle function
- */
+const app = express();
 
-const elemToggleFunc = function (elem) { elem.classList.toggle("active"); }
+// Middleware to parse JSON and URL-encoded data
+app.use(express.json());
+app.use(express.urlencoded({ extended: false }));
 
+// Set EJS as the view engine
+app.set('view engine', 'ejs');
 
+// Serve static files (CSS, images, etc.)
+app.use(express.static("public"));
+app.use(express.static(path.join(__dirname, 'public')));
 
-/**
- * navbar toggle
- */
+// Home route
+app.get("/", (req, res) => {
+    res.render("home.ejs");
+});
 
-const navbar = document.querySelector("[data-navbar]");
-const overlay = document.querySelector("[data-overlay]");
-const navCloseBtn = document.querySelector("[data-nav-close-btn]");
-const navOpenBtn = document.querySelector("[data-nav-open-btn]");
-const navbarLinks = document.querySelectorAll("[data-nav-link]");
+// Login route
+app.get("/login", (req, res) => {
+    res.render("login.ejs");
+});
 
-const navElemArr = [overlay, navCloseBtn, navOpenBtn];
+// Signup route
+app.get("/signup", (req, res) => {
+    res.render("signup.ejs");
+});
 
-/**
- * close navbar when click on any navbar link
- */
+// Signup POST route
+app.post("/signup", async (req, res) => {
+    const data = {
+        username: req.body.username,
+        password: req.body.password
+    };
 
-for (let i = 0; i < navbarLinks.length; i++) { navElemArr.push(navbarLinks[i]); }
+    try {
+        // Check if the user data is already present in the database
+        const existingUser = await User.findOne({ username: data.username });
+        if (existingUser) {
+            console.log('User already exists');
+            return res.send('User already exists');
+        }
 
-/**
- * addd event on all elements for toggling navbar
- */
+        // Hashing the password
+        const saltRounds = 10;
+        const hashedPassword = await bcrypt.hash(data.password, saltRounds);
+        data.password = hashedPassword;
 
-for (let i = 0; i < navElemArr.length; i++) {
-  navElemArr[i].addEventListener("click", function () {
-    elemToggleFunc(navbar);
-    elemToggleFunc(overlay);
-  });
-}
+        // Insert the new user data into the database
+        const userData = await User.create(data);
+        console.log(userData);
+        res.render('home');
+    } catch (error) {
+        console.error('Error during signup:', error);
+        res.status(500).send('Error during signup');
+    }
+});
 
+// Login POST route
+app.post("/login", async (req, res) => {
+    try {
+        const check = await User.findOne({ username: req.body.username });
+        if (!check) {
+            res.render('home');
+        } else {
+            // Compare the hashed password from the database
+            const isPasswordValid = await bcrypt.compare(req.body.password, check.password);
+            if (isPasswordValid) {
+                res.render('home');
+            } else {
+                res.send('Wrong details');
+            }
+        }
+    } catch {
+        res.send('Entered wrong details');
+    }
+});
 
-
-/**
- * header active state
- */
-
-const header = document.querySelector("[data-header]");
-
-window.addEventListener("scroll", function () {
-  window.scrollY >= 400 ? header.classList.add("active")
-    : header.classList.remove("active");
-}); 
-
-
-
-
+// Server listening
+const port = 3001;
+app.listen(port, () => {
+    console.log(`Server is running at port ${port}`);
+});
